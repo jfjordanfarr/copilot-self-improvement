@@ -1,18 +1,32 @@
 ## Project Overview
-This project defines the Copilot Self-Improvement plugin for VS Code, a simple MCP server offering syntactic sugar over read/write operations on .github/instructions/*.selfImprovement.instructions.md files.
+This project defines the Copilot Self-Improvement plugin for VS Code, a radically simple read-only MCP tool which provides Github Copilot with the right *instincts* and *context* to durably self-manage the existing Copilot Instructions mechanism.
 `.github/instructions/*.instructions.md` files are prompts that are automatically added to the context window when matched to contain a glob pattern in their frontmatter. 
 This simple technique can be used to introduce self-improvement capabilities to any project using GitHub Copilot Agent Mode.
 
+---
+---
+---
+
 ## AI Session State
-When Agent Mode is enabled, it is mandatory to utilize the [AI SESSION STATE FILE](AgentOps/AI_SESSION_STATE.md) to track your progress and decisions.
-That file exists as a de-facto medium-term memory mechanism, carrying stateful/semi-ephemeral information across multiple context windows.
-On average, we expect one update to the session state doc per user response.
-Like our MDMD approach, this requires a commitment to keeping the AI Session State up-to-date with your current understanding and decisions.
-If not in Agent Mode (and conversing with a human user), please **do not** modify the AI Session State. This avoids issues with certain fully-autonomous agentic workflows.
+
+>[!IMPORTANT]
+>When Agent Mode is enabled, it is **mandatory** to utilize the [AI SESSION STATE FILE](../AgentOps/AI_SESSION_STATE.md) to track your progress and decisions.
+>That file exists as a de-facto medium-term memory mechanism, carrying stateful/semi-ephemeral information across multiple context windows.
+>On average, you (AI agent) are expected to one update to the session state doc per user response.
+>Like our MDMD approach, this requires a commitment to keeping the AI Session State up-to-date with your current understanding and decisions.
+>A highly durable indiciation for **when** to update the AI Session State file is this: 
+>If there is no evidence of a session state update within your active context window, **the time to update the session state file is now**.
+
+>[!NOTE]
+>If not in Agent Mode (and conversing with a human user), please **do not** modify the AI Session State. This avoids issues with certain fully-autonomous agentic workflows.
+
+---
+---
+---
 
 ## Docs-First Approach
 This project utilizes a Docs-First approach, patterned with an AI-Human collaboration model called Membrane Design Markdown (MDMD). 
-Please refer to the [MDMD Specification](AgentOps/Reference/MDMD_Specification_Standard/MDMD.md) for comprehensive details on the syntax and structure used throughout this project.
+Please refer to the [MDMD Specification](../AgentOps/Reference/MDMD_Specification_Standard/MDMD.md) for comprehensive details on the syntax and structure used throughout this project.
 MDMD provides substantial grounding benefits but requires truly living documentation practices to be effective.
 AI assistants are expected to consult the docs/ and make updates **often**.
 
@@ -72,7 +86,7 @@ This flow is iterative. Discoveries or constraints at lower strata (e.g., implem
 - Favor **quality** over **expedience**, and of course, 
 - **Always be improving.**
 
-## Grounding Strategy
+## Workspace Grounding Strategy
 
 The most common hallucination from AI assistants is that of file paths. 
-If you are ever in doubt, point your [Tree View](AgentsOps/Scripts/tree_gitignore.py) at a directory for a true (non-ignored) file census.
+If you are ever in doubt, point your [Tree View](../AgentsOps/Scripts/tree_gitignore.py) at a directory for a true (non-ignored) file census.

@@ -1,42 +1,45 @@
 ::: {unit}
 id: "impl-extension-ts"
-title: "Extension Entry Point (extension.ts) Implementation"
+title: "Extension Entry Point (extension.ts) Implementation (Ultra-Minimalist)"
 unit-type: "typescript-module"
 language: "typescript"
-status: "draft"
-version: "1.0"
-brief: "Specifies the implementation of the main extension entry point."
-source-ref: "./src/extension.ts"
-see-also: ["[[arch-main]]", "[[impl-lm-tool-class]]"]
+status: "stable" # Updated from draft
+version: "1.1" # Incremented for minimalist pivot
+brief: "Specifies the implementation of the main extension entry point, which now only registers a single Language Model Tool."
+source-ref: "../../../src/extension.ts" # Corrected source-ref path
+see-also: ["[[main-architecture]]", "[[language-model-tool-implementation]]", "[[copilot-integration-architecture]]"]
 
-This module contains the `activate` function, which is the main entry point for the extension. It is responsible for registering all commands and the Language Model Tool.
+This module contains the `activate` function, which is the main entry point for the extension. In the ultra-minimalist design, its sole responsibility is to instantiate and register the single Language Model Tool (`copilotSelfImprovement-getInstructionsAndConventions`).
 
 ```typescript
 import * as vscode from 'vscode';
-import { InstructionTool } from './instructionTool'; // Ref: [[impl-lm-tool-class]]
-import { createInstructionFileCommand } from './fileHandler'; // Ref: [[impl-file-handler]]
+import { InstructionTool } from './instructionTool'; // Ref: [[language-model-tool-implementation]]
 
 // This function is called when the extension is activated
+// See [[main-architecture]] and [[copilot-integration-architecture]]
 export function activate(context: vscode.ExtensionContext) {
 
-    // Register the command to create a new instruction file
-    const createCommand = vscode.commands.registerCommand(
-        'copilot-self-improvement.createInstructionFile',
-        createInstructionFileCommand
-    );
-
-    // Register the Language Model Tool
+    // Instantiate the Language Model Tool
     const instructionTool = new InstructionTool();
+
+    // Register the Language Model Tool with VS Code
     const toolRegistration = vscode.lm.registerTool(
-        instructionTool.name,
+        instructionTool.name, // This is 'copilotSelfImprovement-getInstructionsAndConventions'
         instructionTool
     );
 
-    // Add disposables to the context for cleanup
-    context.subscriptions.push(createCommand, toolRegistration);
+    // Add the tool registration to the context's subscriptions for cleanup on deactivation
+    context.subscriptions.push(toolRegistration);
+
+    // No other commands or UI elements are registered, aligning with the minimalist vision.
 }
 
 // This function is called when the extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+    // Any necessary cleanup would go here, though for this simple extension,
+    // the disposal of subscriptions handled by VS Code is usually sufficient.
+}
 ```
+
+This implementation ensures that only the essential `InstructionTool` is made available to GitHub Copilot, adhering to the principle of minimal functionality.
 :::

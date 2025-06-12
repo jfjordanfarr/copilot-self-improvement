@@ -1,47 +1,55 @@
-::: {unit}
-id: "impl-file-handler"
-title: "File Handler Implementation"
-unit-type: "typescript-module"
-language: "typescript"
-status: "draft"
-version: "1.0"
-brief: "Specifies the logic for securely reading and writing instruction files."
-source-ref: "./src/fileHandler.ts"
-see-also: ["[[req-file-format]]", "[[req-security]]"]
+---
+id: file-handler-implementation
+title: File Handler Implementation
+status: implemented
+version: 1.3 # Incremented due to significant refactor for minimalist pivot
+date: 2025-06-09 # Updated date
+authors:
+  - AI Assistant
+source-ref: "../../../src/fileHandler.ts"
+see-also:
+  - "[[core-functionality-requirement]]"
+  - "[[file-format-requirement]]"
+  - "[[security-requirement]]"
+  - "[[main-architecture]]"
+---
+{unit unit-type="typescript-module" id="file-handler-module"}
 
-This module implements the logic for all file system interactions, adhering strictly to security requirements.
+# File Handler (`fileHandler.ts`)
 
-```typescript
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as yamlFront from 'yaml-front-matter';
+This module is responsible for discovering, parsing, and providing metadata for instruction files (`*.selfImprovement.instructions.md`) located within the workspace's `.github/instructions/` directory. It does **not** read the full content of the files for its own operations but rather extracts specific frontmatter and file system information.
 
-const INSTRUCTIONS_DIR = path.join('.github', 'instructions');
-const FILE_SUFFIX = '.selfImprovement.instructions.md';
+## Key Responsibilities & Functionality
 
-// Placeholder for logic that reads all active instruction files
-export async function readAndProcessInstructions(): Promise<string> {
-    // 1. Get workspace root
-    // 2. Construct Uri for INSTRUCTIONS_DIR
-    // 3. Use vscode.workspace.fs.readDirectory to find all files ending with FILE_SUFFIX
-    // 4. For each file, use vscode.workspace.fs.readFile
-    // 5. Decode Uint8Array to string
-    // 6. Use yamlFront.loadFront to parse
-    // 7. Filter for files where 'active: true'
-    // 8. Concatenate the markdown content of active files and return
-    return "Processed instructions content";
-}
+*   **Discovering Instruction Files:**
+    *   Scans the `.github/instructions/` directory for files matching the `*.selfImprovement.instructions.md` pattern.
+*   **Parsing Frontmatter and Deriving Metadata:**
+    *   For each discovered file, it parses the YAML frontmatter to extract `applyTo` and `purpose` fields.
+    *   It derives a `title` for the instruction using a fallback strategy: frontmatter `title` field (if present) -> first H1 markdown header -> first non-empty line of content (requires minimal content read) -> filename.
+    *   It retrieves the `lastModified` timestamp from the file system.
+    *   It records the `filePath` (absolute path) and a stringified `uri`.
+*   **Constructing `InstructionFileEntry` Objects:**
+    *   Aggregates the gathered information into an `InstructionFileEntry` object for each file. The structure is:
+        ```typescript
+        export interface InstructionFileEntry {
+            name: string;           // Original filename
+            uri: string;            // Stringified URI of the file
+            filePath: string;       // MEASURED: Full absolute path
+            applyTo: string;        // FRONTMATTER: Glob pattern (defaults to '**/*')
+            purpose?: string;       // FRONTMATTER: Brief description
+            title: string;          // MEASURED: Derived (frontmatter 'title' -> 1st H1 -> 1st content line -> filename)
+            lastModified: string;   // MEASURED: ISO 8601 timestamp
+        }
+        ```
+*   **Providing Data to `instructionTool.ts`:**
+    *   The primary function `readAllInstructionFiles()` returns a promise resolving to an array of `InstructionFileEntry` objects.
 
-// Placeholder for the command to create a new file
-export async function createInstructionFileCommand() {
-    // 1. Prompt user for filename using vscode.window.showInputBox
-    // 2. Validate filename
-    // 3. Construct full file path within INSTRUCTIONS_DIR
-    // 4. Use vscode.workspace.fs.createDirectory to ensure directory exists
-    // 5. Create default file content (template with frontmatter)
-    // 6. Encode string to Uint8Array
-    // 7. Use vscode.workspace.fs.writeFile
-    // 8. Open the new file for the user with vscode.window.showTextDocument
-}
-```
-:::
+## Adherence to Requirements
+
+This implementation directly supports:
+*   `[[core-functionality-requirement]]` by providing the mechanism to list and process metadata from instruction files.
+*   `[[file-format-requirement]]` by correctly parsing the specified frontmatter (`applyTo`, `purpose`, optional `title`) and deriving other metadata fields as defined.
+*   `[[security-requirement]]` by restricting file operations to the `.github/instructions/` directory and only parsing necessary frontmatter, not exposing full file content to the extension's internal logic (full content reading is deferred to Copilot itself).
+
+It is a key component of the `[[main-architecture]]`.
+{/unit}

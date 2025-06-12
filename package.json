@@ -1,0 +1,56 @@
+{
+  "name": "copilot-self-improvement",
+  "displayName": "copilot-self-improvement",
+  "description": "An astonishingly simple MCP tool which empowers GitHub Copilot agents to improve themselves by simply providing good schemas, instructions, and intuitions around the already-existing Github Copilot 'instructions file' mechanism. Secure by default, this tool performs zero network requests and only reads local files in the configured instructions file directories.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [],
+    "languageModelTools": [
+      {
+        "name": "copilotSelfImprovement-getSelfImprovementContext",
+        "displayName": "Get Copilot Self-Improvement Instructions and Conventions",
+        "modelDescription": "This is GitHub Copilot's essential tool for understanding and managing its own custom operational instructions (`*.selfImprovement.instructions.md` files). **USE THIS TOOL WHENEVER YOU (Github Copilot):** 1) Make the same mistake repeatedly, 2) Inform the user that you will modify your behavior going forward ('I will note that you prefer __'), or 3) are explicitly asked by the user to change instructions files. Returns a JSON object with an array (of `InstructionFileEntry` objects: `name`, `uri`, `filePath`, `applyTo`, `purpose`, `title`, `lastModified`) and the `conventions` string. Utilizes no network requests and only reads local files in the configured instructions file directories.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/sinon": "^17.0.4",
+    "@types/vscode": "^1.100.0",
+    "@types/yaml-front-matter": "^4.1.3",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "glob": "^11.0.2",
+    "sinon": "^20.0.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "yaml-front-matter": "^4.1.1"
+  }
+}

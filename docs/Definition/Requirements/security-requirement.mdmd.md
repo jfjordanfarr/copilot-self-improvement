@@ -1,18 +1,26 @@
 ::: {unit}
 id: "req-security"
 title: "Security Requirements"
-unit-type: "non-functional-requirement"
+unit-type: "non-functional-requirement-set"
 status: "stable"
-version: "1.0"
-brief: "Defines the security constraints for file system operations and API usage."
-see-also: ["[[csi-project-vision]]", "[[arch-main]]"]
+version: "1.2" # Updated for ultra-minimalist scope
+brief: "Defines strict security constraints: read-only access, limited to a specific directory and specific frontmatter fields."
+see-also: ["[[csi-project-vision]]", "[[arch-main]]", "[[impl-file-handler]]"]
 
-The extension must be designed with security as a primary concern, ensuring user trust and workspace integrity.
+This unit outlines the critical security measures and constraints for the extension, ensuring it operates with the minimum necessary privileges.
 
 ```markdown
-1.  **Directory Confinement**: All file system operations (read, write) MUST be programmatically and rigorously confined to the `{workspaceRoot}/.github/instructions/` subdirectory. The extension must never allow file paths to escape this boundary.
-2.  **Safe Path Construction**: All file paths MUST be constructed and manipulated using the `vscode.Uri` API to prevent platform-specific issues and path injection vulnerabilities.
-3.  **Principle of Least Privilege**: The extension's code and its manifest MUST only request and use permissions necessary for its core function. It must not attempt arbitrary file system access.
-4.  **User Consent for Tool Invocation**: The integration with Copilot MUST leverage the `prepareInvocation` method of the Language Model Tool API to present a clear, user-facing confirmation dialog before the tool reads project files to inform Copilot.
+1.  **Strictly Read-Only Operations**:
+    *   The extension MUST NOT perform any write, create, or delete operations on the file system.
+    *   All interactions with instruction files MUST be strictly limited to reading existing files.
+
+2.  **Scoped and Limited File Access**:
+    *   File system reading MUST be strictly limited to the `{workspaceRoot}/.github/instructions/` directory.
+    *   The extension MUST NOT attempt to list or read files from any other location.
+    *   When reading files from the allowed directory, the extension MUST only parse the YAML frontmatter to extract `applyTo`, `purpose`, and optionally `title` (for title derivation). It MUST NOT read or process the full Markdown body content of the files for its own operations. GitHub Copilot is responsible for reading the full content if needed.
+
+3.  **No Arbitrary Code Execution**: The extension MUST NOT execute any code or commands based on the content of instruction files. Its functionality is solely to list files and provide conventions.
+
+4.  **No User Input for File Paths**: The Language Model Tool provided by the extension does not accept file paths or patterns as input from the LLM, preventing any form of path traversal or broader file system access attempts via tool arguments.
 ```
 :::
