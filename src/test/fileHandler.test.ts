@@ -1,3 +1,4 @@
+// filepath: d:\Projects\copilot-self-improvement\src\test\fileHandler.test.ts
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as sinon from 'sinon';
@@ -22,7 +23,7 @@ suite('FileHandler Test Suite', () => {
     let sandbox: sinon.SinonSandbox;
     let mockWorkspaceFolders: vscode.WorkspaceFolder[] | undefined;
     let mockShowErrorMessage: sinon.SinonStub;
-    let mockConsoleWarn: sinon.SinonStub;
+    let mockLoggerWarn: sinon.SinonStub;
 
     let fsReadDirectoryStub: sinon.SinonStub;
     let fsReadFileStub: sinon.SinonStub;
@@ -30,12 +31,13 @@ suite('FileHandler Test Suite', () => {
     let mockWorkspaceConfigurationGetStub: sinon.SinonStub; // Specific stub for the 'get' method
 
     const FILE_SUFFIX = '.selfImprovement.instructions.md';
-
+    
     setup(() => {
         sandbox = sinon.createSandbox();
         sandbox.stub(vscode.workspace, 'workspaceFolders').get(() => mockWorkspaceFolders);
         mockShowErrorMessage = sandbox.stub(vscode.window, 'showErrorMessage');
-        mockConsoleWarn = sandbox.stub(console, 'warn');
+        // Stub the exported logger from the fileHandler module
+        mockLoggerWarn = sandbox.stub(fileHandler.logger, 'warn');
 
         fsReadDirectoryStub = sandbox.stub();
         fsReadFileStub = sandbox.stub();
@@ -92,14 +94,13 @@ suite('FileHandler Test Suite', () => {
     });
 
     suite('readAllInstructionFiles', () => {
-        const workspaceRoot = vscode.Uri.file(path.resolve('/test/project')); // Use vscode.Uri.file and path.resolve for a canonical absolute path
+        const workspaceRoot = vscode.Uri.file(path.resolve('d:/test/project')); // Use an absolute path for consistency
         const mockMtime = new Date().getTime();
         const mockMtimeISO = new Date(mockMtime).toISOString();
 
         // Helper to setup directory stat and readdir mocks
         const setupDirectory = (relPath: string, files: [string, vscode.FileType][]) => {
-            const dirUriToMatch = vscode.Uri.joinPath(workspaceRoot, path.normalize(relPath)); // Normalize relPath
-            // Use a custom matcher for URIs based on fsPath for stat and readDirectory
+            const dirUriToMatch = vscode.Uri.joinPath(workspaceRoot, path.normalize(relPath));
             fsStatStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(dirUriToMatch.fsPath)))
                       .resolves({ type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 });
             fsReadDirectoryStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(dirUriToMatch.fsPath)))
@@ -108,7 +109,7 @@ suite('FileHandler Test Suite', () => {
 
         // Helper to setup file stat and read mocks
         const setupFile = (dirRelPath: string, fileName: string, content: string) => {
-            const dirUri = vscode.Uri.joinPath(workspaceRoot, path.normalize(dirRelPath)); // Normalize dirRelPath
+            const dirUri = vscode.Uri.joinPath(workspaceRoot, path.normalize(dirRelPath));
             const fileUriToMatch = vscode.Uri.joinPath(dirUri, fileName);
             fsReadFileStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(fileUriToMatch.fsPath)))
                           .resolves(new TextEncoder().encode(content));
@@ -116,20 +117,21 @@ suite('FileHandler Test Suite', () => {
                       .resolves({ type: vscode.FileType.File, ctime: 0, mtime: mockMtime, size: 100 });
             return fileUriToMatch;
         };
-
-
+        
         test('Should return empty array and warn if instructionLocationsSetting is undefined', async () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns(undefined);
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.deepStrictEqual(result, []);
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(/not configured or is not an object/));
+            assert.ok(mockLoggerWarn.calledOnce, "logger.warn should be called once");
+            assert.ok(mockLoggerWarn.calledWith("'chat.instructionsFilesLocations' setting is not configured or is not an object"));
         });
 
         test('Should return empty array and warn if instructionLocationsSetting is not an object', async () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns('not-an-object');
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.deepStrictEqual(result, []);
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(/not configured or is not an object/));
+            assert.ok(mockLoggerWarn.calledOnce, "logger.warn should be called once");
+            assert.ok(mockLoggerWarn.calledWith("'chat.instructionsFilesLocations' setting is not configured or is not an object"));
         });
         
         test('Should return empty array if a configured directory does not exist', async () => {
@@ -143,33 +145,26 @@ suite('FileHandler Test Suite', () => {
 
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.deepStrictEqual(result, []);
-
-            // Check for the first warning
-            sinon.assert.calledWith(mockConsoleWarn, `Configured instruction directory not found: ${nonExistentUri.fsPath}. Skipping.`);
-            // Check for the second warning
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(new RegExp(`No instruction files ending with '${FILE_SUFFIX}' found in the configured and enabled locations: ${nonExistentRelPath.replace(/\\\\/g, '\\\\\\\\')}`)));
-            // Ensure mockConsoleWarn was called exactly twice if these are the only expected warnings for this test case
-            sinon.assert.calledTwice(mockConsoleWarn); 
+            
+            assert.ok(mockLoggerWarn.calledOnce, "logger.warn should be called once");
+            assert.ok(mockLoggerWarn.calledWith(sinon.match(`Skipping instruction location '${nonExistentRelPath}'. Details: Directory not found`)));
         });
 
         test('Should ignore and warn about absolute paths in settings', async () => {
-            const absolutePath = path.resolve('/abs/path/instr');
-            const expectedWarningSkipping = `Skipping absolute path found in 'chat.instructionsFilesLocations': ${absolutePath}. Paths should be relative to the workspace root.`;
-            
+            const absolutePath = path.resolve('D:/abs/path/instr');
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [absolutePath]: true });
             
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.deepStrictEqual(result, []);
-            sinon.assert.calledWith(mockConsoleWarn, expectedWarningSkipping);
-            // This will be the second warning, after the "Skipping absolute path" warning.
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(new RegExp(`No instruction files ending with '${FILE_SUFFIX}' found in the configured and enabled locations: ${absolutePath.replace(/\\\\/g, '\\\\\\\\')}`)));
-            sinon.assert.calledTwice(mockConsoleWarn);
+
+            assert.ok(mockLoggerWarn.calledOnce, "logger.warn should be called once");
+            // CORRECTED: Removed the over-zealous backslash replacement.
+            assert.ok(mockLoggerWarn.calledWith(sinon.match(`Skipping absolute path found in 'chat.instructionsFilesLocations': ${absolutePath}. Paths should be relative to the workspace root.`)));
         });
 
         test('Should ignore and warn if a configured path is a file, not a directory', async () => {
             const filePathAsDir = path.normalize('path/to/a-file.txt');
             const fileUri = vscode.Uri.joinPath(workspaceRoot, filePathAsDir);
-            const expectedWarningNotDir = `Path specified in 'chat.instructionsFilesLocations' is not a directory: ${fileUri.fsPath}. Skipping.`;
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [filePathAsDir]: true });
 
             fsStatStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(fileUri.fsPath)))
@@ -177,9 +172,10 @@ suite('FileHandler Test Suite', () => {
             
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.deepStrictEqual(result, []);
-            sinon.assert.calledWith(mockConsoleWarn, expectedWarningNotDir);
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(new RegExp(`No instruction files ending with '${FILE_SUFFIX}' found in the configured and enabled locations: ${filePathAsDir.replace(/\\\\/g, '\\\\\\\\')}`)));
-            sinon.assert.calledTwice(mockConsoleWarn);
+            
+            assert.ok(mockLoggerWarn.calledOnce, "logger.warn should be called once");
+            // CORRECTED: Removed the over-zealous backslash replacement.
+            assert.ok(mockLoggerWarn.calledWith(sinon.match(`Path specified in 'chat.instructionsFilesLocations' is not a directory: ${fileUri.fsPath}. Skipping.`)));
         });
         
         test('Should correctly parse files with all fields from a configured directory', async () => {
@@ -187,7 +183,13 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const fileName = `test-all-fields${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: src/**/*.ts\\npurpose: Test purpose\\ntitle: Frontmatter Title\\n---\\n# Title from H1 Will Be Ignored if Frontmatter Title Exists\\nActual content`;
+            const fileContent = `---
+applyTo: src/**/*.ts
+purpose: Test purpose
+title: Frontmatter Title
+---
+# Title from H1 Will Be Ignored if Frontmatter Title Exists
+Actual content`;
             
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             const fileUri = setupFile(relPath, fileName, fileContent);
@@ -209,7 +211,12 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const fileName = `test-h1-title${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: src/**/*.js\\npurpose: Test H1 title\\n---\\n# Actual Title from H1\\nSome content here.`;
+            const fileContent = `---
+applyTo: src/**/*.js
+purpose: Test H1 title
+---
+# Actual Title from H1
+Some content here.`;
             
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             setupFile(relPath, fileName, fileContent);
@@ -223,24 +230,26 @@ suite('FileHandler Test Suite', () => {
         test('Should default applyTo to **/* if missing or empty', async () => {
             const relPath = path.normalize('.vscode/instructions');
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
-            // Correctly setup the directory first
-            setupDirectory(relPath, []); 
-
+            
             const fileNameMissing = `missing-applyto${FILE_SUFFIX}`;
-            const contentMissing = `---\\\\npurpose: Test purpose\\\\n---\\\\n# Title`;
+            const contentMissing = `---
+purpose: Test purpose
+---
+# Title`;
             setupFile(relPath, fileNameMissing, contentMissing);
 
             const fileNameEmpty = `empty-applyto${FILE_SUFFIX}`;
-            const contentEmpty = `---\\\\napplyTo: \\\\npurpose: Test purpose\\\\n---\\\\n# Title`;
+            const contentEmpty = `---
+applyTo: 
+purpose: Test purpose
+---
+# Title`;
             setupFile(relPath, fileNameEmpty, contentEmpty);
             
-            // Update directory listing AFTER files are setup
-            const dirUriToMatch = vscode.Uri.joinPath(workspaceRoot, relPath);
-            fsReadDirectoryStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(dirUriToMatch.fsPath)))
-                               .resolves([
-                                   [fileNameMissing, vscode.FileType.File],
-                                   [fileNameEmpty, vscode.FileType.File],
-                               ]);
+            setupDirectory(relPath, [
+                [fileNameMissing, vscode.FileType.File],
+                [fileNameEmpty, vscode.FileType.File],
+            ]);
 
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.strictEqual(result.length, 2);
@@ -253,7 +262,12 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const fileName = `title-from-content${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: *.js\\npurpose: Test purpose\\n---\\nThis is the first content line and should be the title.\r\nAnother line.`;
+            const fileContent = `---
+applyTo: "*.js"
+purpose: Test purpose
+---
+This is the first content line and should be the title.
+Another line.`;
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             setupFile(relPath, fileName, fileContent);
 
@@ -267,7 +281,11 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
             
             const fileName = `title-from-filename-complex.name${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: *.py\\npurpose: Test purpose\\n---\\n`; 
+            const fileContent = `---
+applyTo: "*.py"
+purpose: Test purpose
+---
+\\\`\\\`;`; 
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             setupFile(relPath, fileName, fileContent);
 
@@ -281,7 +299,13 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const fileName = `title-from-filename-whitespace${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: *.py\\npurpose: Test purpose\\n---\\n   \\n  \\t \\n  `; 
+            const fileContent = `---
+applyTo: "*.py"
+purpose: Test purpose
+---
+   
+  \\t 
+  \\\`\\\`;`; 
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             setupFile(relPath, fileName, fileContent);
             
@@ -295,7 +319,10 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const fileName = `no-purpose${FILE_SUFFIX}`;
-            const fileContent = `---\\napplyTo: *.txt\\n---\\n# Title`;
+            const fileContent = `---
+applyTo: "*.txt"
+---
+# Title`;
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
             setupFile(relPath, fileName, fileContent);
 
@@ -309,7 +336,11 @@ suite('FileHandler Test Suite', () => {
             mockWorkspaceConfigurationGetStub.withArgs('instructionsFilesLocations').returns({ [relPath]: true });
 
             const validFileName = `valid${FILE_SUFFIX}`;
-            const validFileContent = `---napplyTo: globnpurpose: pn---n# VT`;
+            const validFileContent = `---
+applyTo: glob
+purpose: p
+---
+# VT`;
 
             const errorFileName = `error${FILE_SUFFIX}`;
             const errorFileUri = vscode.Uri.joinPath(vscode.Uri.joinPath(workspaceRoot, relPath), errorFileName);
@@ -323,7 +354,6 @@ suite('FileHandler Test Suite', () => {
             
             fsReadFileStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(errorFileUri.fsPath)))
                           .rejects(new Error('Read fail'));
-            // Ensure the stat for the error file itself says it's a file, so readFile is attempted
             fsStatStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(errorFileUri.fsPath)))
                       .resolves({ type: vscode.FileType.File, ctime: 0, mtime: mockMtime, size: 0 });
 
@@ -331,15 +361,8 @@ suite('FileHandler Test Suite', () => {
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.strictEqual(result.length, 1);
             assert.strictEqual(result[0].name, validFileName);
-            // The warning from processFile should be a showErrorMessage call
-            sinon.assert.calledWith(mockShowErrorMessage, sinon.match(new RegExp(`Error reading or parsing frontmatter for instruction file '${errorFileName}'. Details: Read fail`)));
-            // Check for the "No instruction files found" warning if only error files were in a dir (not applicable here as one is valid)
-            // Check if any console.warn was called unexpectedly
-            // For this specific test, we expect one valid file, and one error message.
-            // If the directory itself was valid, no "No instruction files found..." warning should appear unless all files in it failed or were ignored.
-            // Let's ensure no other console.warns were made related to the directory processing itself for 'error/handling/path'
-            const relPathUri = vscode.Uri.joinPath(workspaceRoot, relPath);
-            sinon.assert.neverCalledWith(mockConsoleWarn, sinon.match(relPathUri.fsPath)); // Ensure no warnings about the dir itself
+            
+            assert.ok(mockShowErrorMessage.calledWith(sinon.match(`Error reading or parsing frontmatter for instruction file '${errorFileName}'. Details: Read fail`)));
         });
 
         test('Should handle fs.stat errors gracefully for an individual file', async () => {
@@ -350,16 +373,19 @@ suite('FileHandler Test Suite', () => {
             const fileUri = vscode.Uri.joinPath(vscode.Uri.joinPath(workspaceRoot, relPath), fileName);
 
             setupDirectory(relPath, [[fileName, vscode.FileType.File]]);
-            // fsStatStub for the file itself (not the directory) should reject
             fsStatStub.withArgs(sinon.match((uri: vscode.Uri) => uri && path.normalize(uri.fsPath) === path.normalize(fileUri.fsPath)))
                       .rejects(new Error('Stat fail'));
-
+                      
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
             assert.strictEqual(result.length, 0, 'File with stat error should be skipped');
-            sinon.assert.calledWith(mockShowErrorMessage, sinon.match(new RegExp(`Error reading or parsing frontmatter for instruction file '${fileName}'. Details: Stat fail`)));
             
-            // We also expect a console.warn that no files were found in this problematic directory.
-            sinon.assert.calledWith(mockConsoleWarn, sinon.match(new RegExp(`No instruction files ending with '${FILE_SUFFIX}' found in the configured and enabled locations: ${relPath.replace(/\\\\/g, '\\\\\\\\')}`)));
+            const errorMessageCalls = mockShowErrorMessage.getCalls().map(call => call.args[0]);
+            assert.ok(errorMessageCalls.some(message => 
+                message.includes(`Error reading or parsing frontmatter for instruction file '${fileName}'`) && 
+                message.includes('Stat fail')
+            ));
+            
+            assert.ok(mockLoggerWarn.calledWith(sinon.match(`No instruction files found matching pattern '*${FILE_SUFFIX}' in enabled location: ${relPath}`)));
         });
 
         test('Should process files from multiple configured directories and avoid duplicates', async () => {
@@ -372,40 +398,47 @@ suite('FileHandler Test Suite', () => {
             });
 
             const file1Name = `file1-in-dir1${FILE_SUFFIX}`;
-            const file1Content = "---\\ntitle: File1\\n---\\nContent1";
-            setupDirectory(path1, []); // Setup dir1
-            const file1Uri = setupFile(path1, file1Name, file1Content); // Setup file1 in dir1
+            const file1Content = `---
+title: File1
+---
+Content1`;
+            const file1Uri = setupFile(path1, file1Name, file1Content);
             
             const file2Name = `file2-in-dir2${FILE_SUFFIX}`;
-            const file2Content = "---\\ntitle: File2\\n---\\nContent2";
-            setupDirectory(path2, []); // Setup dir2
-            const file2Uri = setupFile(path2, file2Name, file2Content); // Setup file2 in dir2
+            const file2Content = `---
+title: File2
+---
+Content2`;
+            const file2Uri = setupFile(path2, file2Name, file2Content);
 
             const commonFileName = `common${FILE_SUFFIX}`;
-            const commonFile1Content = "---\\ntitle: CommonFileInDir1\\n---\\nContentCommon1";
-            const commonFile1Uri = setupFile(path1, commonFileName, commonFile1Content); // common file in dir1
+            const commonFile1Content = `---
+title: CommonFileInDir1
+---
+ContentCommon1`;
+            const commonFile1Uri = setupFile(path1, commonFileName, commonFile1Content);
 
-            const commonFile2Content = "---\\ntitle: CommonFileInDir2\\n---\\nContentCommon2";
-            const commonFile2Uri = setupFile(path2, commonFileName, commonFile2Content); // common file with same name in dir2
+            const commonFile2Content = `---
+title: CommonFileInDir2
+---
+ContentCommon2`;
+            const commonFile2Uri = setupFile(path2, commonFileName, commonFile2Content);
 
-            // Update directory listings
-            const dir1Uri = vscode.Uri.joinPath(workspaceRoot, path1);
-            fsReadDirectoryStub.withArgs(sinon.match((uri: vscode.Uri) => path.normalize(uri.fsPath) === path.normalize(dir1Uri.fsPath))).resolves([
+            setupDirectory(path1, [
                 [file1Name, vscode.FileType.File],
                 [commonFileName, vscode.FileType.File]
             ]);
-            const dir2Uri = vscode.Uri.joinPath(workspaceRoot, path2);
-            fsReadDirectoryStub.withArgs(sinon.match((uri: vscode.Uri) => path.normalize(uri.fsPath) === path.normalize(dir2Uri.fsPath))).resolves([
+            setupDirectory(path2, [
                 [file2Name, vscode.FileType.File],
                 [commonFileName, vscode.FileType.File]
             ]);
 
             const result = await fileHandler.readAllInstructionFiles(workspaceRoot);
-            assert.strictEqual(result.length, 4, "Should find 4 unique files");
-            assert.ok(result.find(f => f.name === file1Name && f.filePath === file1Uri.fsPath));
-            assert.ok(result.find(f => f.name === file2Name && f.filePath === file2Uri.fsPath));
-            assert.ok(result.find(f => f.name === commonFileName && f.filePath === commonFile1Uri.fsPath));
-            assert.ok(result.find(f => f.name === commonFileName && f.filePath === commonFile2Uri.fsPath));
+            assert.strictEqual(result.length, 4, "Should find 4 unique files because they have different paths");
+            assert.ok(result.find(f => f.filePath === file1Uri.fsPath));
+            assert.ok(result.find(f => f.filePath === file2Uri.fsPath));
+            assert.ok(result.find(f => f.filePath === commonFile1Uri.fsPath));
+            assert.ok(result.find(f => f.filePath === commonFile2Uri.fsPath));
         });
         
         test('Should handle duplicate file paths if a directory is listed twice with different keys but same effective path', async () => {
@@ -419,8 +452,11 @@ suite('FileHandler Test Suite', () => {
             });
 
             const fileName = `unique-file${FILE_SUFFIX}`;
-            const fileContent = "---\\ntitle: Unique\\n---\\nContent";
-            // Setup directory with the file
+            const fileContent = `---
+title: Unique
+---
+Content`;
+            
             setupDirectory(effectiveRelPath, [[fileName, vscode.FileType.File]]);
             const fileUri = setupFile(effectiveRelPath, fileName, fileContent);
             

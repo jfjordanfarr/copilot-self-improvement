@@ -11,7 +11,9 @@
     "Chat",
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onChatParticipant:githubdev.copilot-chat"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [],

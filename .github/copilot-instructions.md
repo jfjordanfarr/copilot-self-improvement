@@ -17,6 +17,10 @@ This simple technique can be used to introduce self-improvement capabilities to 
 >A highly durable indiciation for **when** to update the AI Session State file is this: 
 >If there is no evidence of a session state update within your active context window, **the time to update the session state file is now**.
 
+>[!IMPORTANT]
+>If the circumstances or context change in such a way that would leave the AI Session State out of sync with your current understanding, you (AI agent) are expected to update the AI Session State file immediately.
+>Failure to do so can cause cascading misunderstandings and errors in subsequent interactions.
+
 >[!NOTE]
 >If not in Agent Mode (and conversing with a human user), please **do not** modify the AI Session State. This avoids issues with certain fully-autonomous agentic workflows.
 

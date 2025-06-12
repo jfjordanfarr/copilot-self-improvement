@@ -70,3 +70,25 @@ All planned MDMD documentation has been updated to be coherent with this ultra-m
 - **2025-06-11 (Afternoon): UX Polish tasks for `fileHandler.ts` (multi-dir scan) and `extension.ts` (one-time setup message) completed based on *predefined* default directories.**
 - **2025-06-11 (Correction): Realized that the extension MUST use the `chat.instructionsFilesLocations` VS Code setting for sourcing instruction file paths, not a hardcoded list. Plan updated to refactor the UX polish accordingly.**
 - **2025-06-12: Completed refactoring of `src/fileHandler.ts` and `src/extension.ts` to use `chat.instructionsFilesLocations`.** The `readAllInstructionFiles` function in `fileHandler.ts` now correctly reads and processes paths from the VS Code setting. The `showOneTimeSetupMessage` function in `extension.ts` has been updated to check these settings and guide the user appropriately. Cognitive complexity issues in `checkForActiveConfiguredPaths` (in `extension.ts`) were resolved by introducing a helper function `checkAndFormatPath` and simplifying the iteration logic. The UX Polish task for dynamic directory scanning and the setup message is now considered complete.
+- **2025-06-12 (Ongoing): Extensive Unit Test Debugging for `fileHandler.ts`.**
+    *   Initiated `npm test`, revealing 2 TypeScript errors (TS2339 in `fileHandler.test.ts`) and 16 failing tests.
+    *   Successfully resolved TS2339 errors.
+    *   Iteratively addressed test failures in `fileHandler.test.ts` by:
+        *   Refining `workspaceRoot` definitions and path escaping for OS compatibility.
+        *   Adjusting Sinon stub assertions (e.g., `calledWith`, `calledWithExactly`, `sinon.match`) for `console.warn` and `vscode.window.showErrorMessage`.
+        *   Modifying `fileHandler.ts` to:
+            *   Ensure consistent string trimming (`.trim()`) before YAML frontmatter parsing and for content passed to `deriveTitle`.
+            *   Correctly prioritize `parsedFm.title` over derived titles.
+            *   Align `console.warn` and `showErrorMessage` message content and formatting precisely with test expectations.
+            *   Address logic for handling non-existent/invalid paths in `instructionLocationsSetting`.
+            *   Fix various TypeScript compilation and ESLint errors introduced during modifications.
+    *   Progress: Reduced failing tests from 16 to 11.
+    *   Key Learnings & Persistent Challenges:
+        *   **Exact Message Matching:** Test assertions for `console.warn` and `showErrorMessage` are highly sensitive to exact string matches, including whitespace and punctuation. Careful use of `sinon.match` or precise string literals is required.
+        *   **YAML Parsing Nuances:** The `yaml-front-matter` library's handling of `__content` and the impact of leading/trailing whitespace on parsing frontmatter and extracting the markdown body require careful attention. Ensuring `applyTo` is correctly parsed and that `deriveTitle` receives the correctly trimmed markdown body is crucial.
+        *   **Path Handling:** Cross-platform path consistency (e.g., path separators) and correct mocking/stubbing of `vscode.Uri.file()` and `fs.promises` (stat, readdir, readFile) are vital. Escaping paths for regex matchers in tests is also important.
+        *   **Sinon Stubs:** Correctly configuring Sinon stubs (e.g., `resolves`, `rejects`, `returns`, `withArgs`) and using appropriate matchers (`sinon.match.string`, `sinon.match.instanceOf`, `sinon.match.any`) is essential for accurate testing of conditional logic and error paths.
+    *   **Current Status (11 tests failing):**
+        *   5 tests related to warning messages for `instructionLocationsSetting` (undefined, not an object, dir not existing, absolute paths, path is a file). These likely still have subtle message mismatches or incorrect call count assertions for `console.warn`.
+        *   5 tests related to `applyTo` parsing and `title` derivation (H1, first content line, filename, whitespace content). These suggest issues with how `yaml-front-matter` parses content or how `deriveTitle` processes its input, potentially due to whitespace or incorrect content extraction.
+        *   1 test for `fs.stat` error handling (message mismatch for `showErrorMessage`).

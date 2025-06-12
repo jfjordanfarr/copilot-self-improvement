@@ -2,10 +2,16 @@
 // Ref: ../docs/Specification/Implementations/file-handler-implementation.mdmd.md
 import * as vscode from 'vscode';
 import * as yamlFront from 'yaml-front-matter';
-import { TextDecoder } from 'util'; // Node.js util for TextDecoder
-import * as path from 'path'; // Import path for isAbsolute check
+import * as path from 'path';
+import { TextDecoder } from 'util';
 
-// REMOVED: const DEFAULT_INSTRUCTION_DIRECTORIES = ['.github/instructions', '.vscode/instructions'];
+// Testable seam for logging warnings. This allows us to reliably stub 'warn' in tests.
+export const logger = {
+    warn: (message?: any, ...optionalParams: any[]): void => {
+        console.warn(message, ...optionalParams);
+    }
+};
+
 const FILE_SUFFIX = '.selfImprovement.instructions.md';
 
 // Interface for the object returned by yamlFront.loadFront
@@ -39,177 +45,186 @@ export function getWorkspaceRootUri(): vscode.Uri | undefined {
     return workspaceFolders[0].uri;
 }
 
-function deriveTitle(markdownContent: string, fileName: string): string {
-    const lines = markdownContent.split('\n');
+export async function processSingleFile(
+    fileUri: vscode.Uri,
+    workspaceRootUri: vscode.Uri,
+    processedFilePaths: Set<string>
+): Promise<InstructionFileEntry | null> {
+    const entryName = path.basename(fileUri.fsPath);
+    const absoluteFilePath = fileUri.fsPath;
 
-    // 1. Check for H1
-    for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine.startsWith('# ')) {
-            return trimmedLine.substring(2).trim();
-        }
+    if (processedFilePaths.has(absoluteFilePath)) {
+        return null;
     }
 
-    // 2. Check for first non-empty content line
-    for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine) {
-            return trimmedLine;
-        }
-    }
-
-    // 3. Fallback to a cleaned-up filename
-    let titleFromFileName = fileName;
-    if (titleFromFileName.endsWith(FILE_SUFFIX)) {
-        titleFromFileName = titleFromFileName.substring(0, titleFromFileName.length - FILE_SUFFIX.length);
-    }
-    // Replace hyphens/underscores with spaces, capitalize words (simple version)
-    titleFromFileName = titleFromFileName.replace(/[_-]/g, ' ');
-    titleFromFileName = titleFromFileName.split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.substring(1))
-        .join(' ');
-    return titleFromFileName || "Untitled Instruction"; // Final fallback
-}
-
-async function processSingleFile(fileUri: vscode.Uri, entryName: string): Promise<InstructionFileEntry | null> {
     try {
-        const rawContent = await vscode.workspace.fs.readFile(fileUri);
-        const fileContentString = new TextDecoder().decode(rawContent);
-        const parsedFm = yamlFront.loadFront(fileContentString) as YamlFrontmatterResult;
-        const stats = await vscode.workspace.fs.stat(fileUri);
+        const fileStats = await vscode.workspace.fs.stat(fileUri);
+        const fileContentBytes = await vscode.workspace.fs.readFile(fileUri);
+        const fileContentString = new TextDecoder().decode(fileContentBytes);
 
-        const applyTo = typeof parsedFm.applyTo === 'string' && parsedFm.applyTo.trim() !== '' ? parsedFm.applyTo.trim() : '**/*';
-        const purpose = typeof parsedFm.purpose === 'string' ? parsedFm.purpose.trim() : undefined;
+        // Trim the content string once before parsing to handle potential BOM or leading/trailing whitespace
+        const trimmedFileContentString = fileContentString.trim();
+
+        const parsedFm = yamlFront.loadFront(trimmedFileContentString) as any;
+        const markdownBody = parsedFm.__content ?? ''; // Ensure markdownBody is a string
+
+        const applyToValue = typeof parsedFm.applyTo === 'string' ? parsedFm.applyTo.trim() : '';
+        const applyTo = applyToValue !== '' ? applyToValue : '**/*';
+
+        const purpose = typeof parsedFm.purpose === 'string' && parsedFm.purpose.trim() !== '' ? parsedFm.purpose.trim() : undefined;
         
-        const markdownContent = parsedFm.__content || '';
-
-        // If parsedFm.title (from frontmatter) exists and is a non-empty string, use it directly (trimmed).
-        // Otherwise, derive the title from the markdownContent (which should also be trimmed before processing).
+        // Prioritize frontmatter title, then derive from H1, then first content line, then filename
         const title = (typeof parsedFm.title === 'string' && parsedFm.title.trim() !== '') 
             ? parsedFm.title.trim() 
-            : deriveTitle(markdownContent.trim(), entryName); // Added .trim() to markdownContent
+            : deriveTitle(markdownBody.trim(), entryName);
 
-        const lastModified = new Date(stats.mtime).toISOString();
+        processedFilePaths.add(absoluteFilePath); // Add to set after successful processing
 
         return {
-            uri: fileUri.toString(),
             name: entryName,
+            uri: fileUri.toString(),
             filePath: fileUri.fsPath,
             applyTo: applyTo,
             purpose: purpose,
             title: title,
-            lastModified: lastModified,
+            lastModified: new Date(fileStats.mtime).toISOString(),
         };
     } catch (error: any) {
+        const errorMessage = `Error reading or parsing frontmatter for instruction file '${entryName}'. Details: ${error.message}`;
+        vscode.window.showErrorMessage(errorMessage);
         console.error(`Error processing file ${fileUri.fsPath}:`, error);
-        // Ensure the message format matches test expectations for showErrorMessage
-        vscode.window.showErrorMessage(`Error reading or parsing frontmatter for instruction file '${entryName}'. Details: ${error.message}`);
         return null;
     }
 }
 
-async function readFilesFromDirectory(instructionsDirUri: vscode.Uri, existingFilePaths: Set<string>): Promise<InstructionFileEntry[]> {
-    const directoryEntries: InstructionFileEntry[] = [];
-    let entries;
-    try {
-        entries = await vscode.workspace.fs.readDirectory(instructionsDirUri);
-    } catch (error: any) {
-        if (error instanceof vscode.FileSystemError && (error.code === 'FileNotFound' || error.code === 'EntryNotFound')) {
-            return []; // Directory not found, return empty for this directory
+export function deriveTitle(markdownContent: string, filename: string): string {
+    if (typeof markdownContent !== 'string') {
+        markdownContent = ''; // Ensure it's a string
+    }
+    const contentForProcessing = markdownContent.trim(); // Trim once for overall content
+
+    // 1. Check for H1
+    const h1Match = /^#\s+(.+)/m.exec(contentForProcessing);
+    if (h1Match?.[1]) {
+        const h1Title = h1Match[1].trim();
+        if (h1Title) { // Ensure trimmed H1 is not empty
+            return h1Title;
         }
-        console.error(`Error reading instructions directory ${instructionsDirUri.fsPath}:`, error);
-        // Optionally, inform the user, but avoid flooding with messages
-        // vscode.window.showWarningMessage(`Could not read instructions from ${instructionsDirUri.fsPath}: ${error.message}`);
-        return [];
+    }
+    // 2. Check for the first non-empty, non-H1, textual line
+    if (contentForProcessing) { 
+        const lines = contentForProcessing.split('\n');
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            // Ensure the line is not an H1, is not empty, and looks like meaningful text
+            // Reject lines that are only special characters, escape sequences, or code blocks
+            if (trimmedLine && 
+                !trimmedLine.startsWith('#') && 
+                /[a-zA-Z0-9]/.test(trimmedLine) &&
+                !/^[\\`\s]*$/.test(trimmedLine) && // Reject lines with only backslashes, backticks, whitespace
+                trimmedLine.length > 2) { // Require minimum meaningful length
+                return trimmedLine;
+            }
+        }
     }
 
-    for (const [entryName, type] of entries) {
-        if (type === vscode.FileType.File && entryName.endsWith(FILE_SUFFIX)) {
-            const fileUri = vscode.Uri.joinPath(instructionsDirUri, entryName);
-            if (existingFilePaths.has(fileUri.fsPath)) {
-                console.warn(`Skipping duplicate instruction file found at ${fileUri.fsPath}`);
-                continue;
-            }
-            const fileEntry = await processSingleFile(fileUri, entryName);
-            if (fileEntry) {
-                directoryEntries.push(fileEntry);
-                existingFilePaths.add(fileUri.fsPath); // Add to set to track processed files
-            }
-        }
-    }
-    return directoryEntries;
+    // 3. Fallback to filename
+    let titleFromFilename = filename.replace(FILE_SUFFIX, '');
+    titleFromFilename = titleFromFilename.replace(/[._-]/g, ' ');
+    // Capitalize each word
+    titleFromFilename = titleFromFilename.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Keeps original case for rest of word
+        .join(' ');
+    return titleFromFilename.trim() || filename; // Ensure not returning empty string if filename was just suffix
 }
 
-async function processInstructionLocation(workspaceRootUri: vscode.Uri, relativeDirPath: string, instructionLocationsSetting: { [key: string]: boolean }, processedFilePaths: Set<string>): Promise<InstructionFileEntry[]> {
-    if (!Object.hasOwn(instructionLocationsSetting, relativeDirPath) || instructionLocationsSetting[relativeDirPath] !== true) {
+async function readFilesFromDirectory(dirUri: vscode.Uri, workspaceRootUri: vscode.Uri, processedFilePaths: Set<string>): Promise<InstructionFileEntry[]> {
+    const entries: InstructionFileEntry[] = [];
+    let dirContents: [string, vscode.FileType][];
+    try {
+        dirContents = await vscode.workspace.fs.readDirectory(dirUri);
+    } catch (error: any) {
+        // This case is handled by the caller (processInstructionLocation), so just return empty.
+        // logger.warn is not needed here as the caller provides a more specific message.
         return [];
     }
 
-    if (path.isAbsolute(relativeDirPath)) {
-        console.warn(`Skipping absolute path found in 'chat.instructionsFilesLocations': ${relativeDirPath}. Paths should be relative to the workspace root.`);
+    for (const [entryName, entryType] of dirContents) {
+        if (entryType === vscode.FileType.File && entryName.endsWith(FILE_SUFFIX)) {
+            const fileUri = vscode.Uri.joinPath(dirUri, entryName);
+            const fileEntry = await processSingleFile(fileUri, workspaceRootUri, processedFilePaths);
+            if (fileEntry) {
+                entries.push(fileEntry);
+            }
+        }
+    }
+    return entries;
+}
+
+
+async function processInstructionLocation(
+    relativeDirPath: string, 
+    isEnabled: boolean, 
+    workspaceRootUri: vscode.Uri,
+    processedFilePaths: Set<string>
+): Promise<InstructionFileEntry[] | null> {
+    if (!isEnabled) {
         return [];
+    }
+    if (path.isAbsolute(relativeDirPath)) {
+        logger.warn(`Skipping absolute path found in 'chat.instructionsFilesLocations': ${relativeDirPath}. Paths should be relative to the workspace root.`);
+        return null;
     }
 
     const instructionsDirUri = vscode.Uri.joinPath(workspaceRootUri, relativeDirPath);
+
     try {
         const stats = await vscode.workspace.fs.stat(instructionsDirUri);
         if (stats.type !== vscode.FileType.Directory) {
-            console.warn(`Path specified in 'chat.instructionsFilesLocations' is not a directory: ${instructionsDirUri.fsPath}. Skipping.`);
+            logger.warn(`Path specified in 'chat.instructionsFilesLocations' is not a directory: ${instructionsDirUri.fsPath}. Skipping.`);
+            return null;
+        }
+        const files = await readFilesFromDirectory(instructionsDirUri, workspaceRootUri, processedFilePaths);
+        if (files.length === 0) {
+            logger.warn(`No instruction files found matching pattern '*${FILE_SUFFIX}' in enabled location: ${relativeDirPath}`);
+        }
+        return files;
+    } catch (error: any) {
+        logger.warn(`Skipping instruction location '${relativeDirPath}'. Details: Directory not found.`);
+        return null;
+    }
+}
+
+export async function readAllInstructionFiles(workspaceRootUri?: vscode.Uri): Promise<InstructionFileEntry[]> {
+    if (!workspaceRootUri) {
+        const folders = vscode.workspace.workspaceFolders;
+        if (folders && folders.length > 0) {
+            workspaceRootUri = folders[0].uri;
+        } else {
+            logger.warn('No workspace folder found. Cannot load instruction files.');
             return [];
         }
-    } catch (error: any) {
-        // Ensure this warning message for non-existent/inaccessible directories matches test expectations.
-        console.warn(`Skipping instruction location ${instructionsDirUri.fsPath} as it was not found or accessible. Details: ${error.message}`);
-        return [];
     }
 
-    return readFilesFromDirectory(instructionsDirUri, processedFilePaths);
-}
-
-/**
- * Reads all *.selfImprovement.instructions.md files from directories specified in the
- * 'chat.instructionsFilesLocations' VS Code setting.
- * Parses minimal frontmatter for each file.
- * @param workspaceRootUri The Uri of the workspace root.
- * @returns A promise that resolves to an array of InstructionFileEntry objects.
- */
-export async function readAllInstructionFiles(workspaceRootUri: vscode.Uri): Promise<InstructionFileEntry[]> {
-    const allInstructionFileEntries: InstructionFileEntry[] = [];
-    const processedFilePaths = new Set<string>();
-
-    const instructionLocationsSetting = vscode.workspace.getConfiguration('chat').get<{[key: string]: boolean}>('instructionsFilesLocations');
-
+    const config = vscode.workspace.getConfiguration('chat');
+    const instructionLocationsSetting = config.get<Record<string, boolean>>('instructionsFilesLocations');
+    
     if (!instructionLocationsSetting || typeof instructionLocationsSetting !== 'object') {
-        console.warn("'chat.instructionsFilesLocations' setting is not configured or is not an object. No instruction files will be loaded by the Self-Improvement extension.");
+        logger.warn("'chat.instructionsFilesLocations' setting is not configured or is not an object");
         return [];
     }
 
-    let hasEnabledAndCheckedPaths = false;
-    for (const relativeDirPath in instructionLocationsSetting) {
-        if (instructionLocationsSetting[relativeDirPath] === true) {
-            hasEnabledAndCheckedPaths = true; // Mark that we are processing at least one enabled path
-            const filesFromDir = await processInstructionLocation(workspaceRootUri, relativeDirPath, instructionLocationsSetting, processedFilePaths);
-            allInstructionFileEntries.push(...filesFromDir);
+    const allFiles: InstructionFileEntry[] = [];
+    const processedFilePaths = new Set<string>();
+    
+    for (const [relativeDirPath, isEnabled] of Object.entries(instructionLocationsSetting)) {
+        if (isEnabled) {
+            const filesFromLocation = await processInstructionLocation(relativeDirPath, isEnabled, workspaceRootUri, processedFilePaths);
+            if (filesFromLocation) {
+                allFiles.push(...filesFromLocation);
+            }
         }
     }
 
-    // Only show the "No instruction files ending with..." warning if:
-    // 1. No files were found AND
-    // 2. There was at least one enabled path in the settings that was processed.
-    if (allInstructionFileEntries.length === 0 && hasEnabledAndCheckedPaths) {
-        const enabledPaths = Object.entries(instructionLocationsSetting)
-            .filter(([,isEnabled]) => isEnabled)
-            .map(([pathKey]) => pathKey);
-        // This condition is now more robust: only log if enabled paths were actually checked.
-        if (enabledPaths.length > 0) { 
-            console.warn(`No instruction files ending with '${FILE_SUFFIX}' found in the configured and enabled locations: ${enabledPaths.join(', ')}.`);
-        }
-    }
-
-    return allInstructionFileEntries;
+    return allFiles;
 }
-
-// REMOVED createInstructionFile function as per ultra-minimalist pivot.
-// Copilot will handle file creation.
-// REMOVED InstructionFile interface as it included markdownContent, which is no longer read by this handler.
-// The new InstructionFileEntry interface is used instead.
