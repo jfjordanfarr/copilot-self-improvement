@@ -1,44 +1,36 @@
-// Ref: ../docs/Specification/Implementations/language-model-tool-implementation.mdmd.md
-// filepath: d:\Projects\copilot-self-improvement\src\instructionTool.ts
-
 import * as vscode from 'vscode';
-import { readAllInstructionFiles, InstructionFileEntry, getWorkspaceRootUri } from './fileHandler'; // Ref: [[impl-file-handler]]
+import { readAllInstructionFiles, InstructionFileEntry, getWorkspaceRootUri } from './fileHandler';
+import { TextDecoder } from 'util';
 
-// Output type for the single tool, matches [[arch-copilot-integration]]
 interface InstructionsAndConventionsOutput {
   instructionFiles: InstructionFileEntry[];
   conventions: string; 
 }
 
-// Define an empty interface for the input if no specific input structure is expected from the LLM
 interface NoToolInput {}
 
-export class InstructionTool implements vscode.LanguageModelTool<NoToolInput> {
-    private readonly extensionUri: vscode.Uri; // Marked as readonly
+export class InstructionTool {
+    private readonly extensionUri: vscode.Uri;
 
     constructor(extensionUri: vscode.Uri) {
         this.extensionUri = extensionUri;
     }
 
-    // The type of the result of `invoke` is inferred from its return type.
-
-    public readonly name = 'copilotSelfImprovement-getInstructionsAndConventions'; // Updated tool name
-    public readonly description = "Lists existing instruction files (*.selfImprovement.instructions.md) and provides conventions for their creation/management. Copilot uses this to understand existing guidance and how to create new instructions itself.";
-    // inputSchema can be an empty object if no specific input is expected from the LLM,
-    // or undefined if the tool doesn't require any input.
-    // For this tool, we don't expect specific structured input from the LLM beyond the standard options.
+    public readonly name = 'copilotSelfImprovement-getInstructionsAndConventions';
+    
+    // THIS IS THE CORRECT LOCATION FOR THE PROMPT ENGINEERING
+    public readonly description = "This is GitHub Copilot's essential tool for understanding and managing its own custom operational instructions (`*.selfImprovement.instructions.md` files). **USE THIS TOOL WHENEVER YOU (Github Copilot):** 1) Make the same mistake repeatedly, 2) Inform the user that you will modify your behavior going forward ('I will note that you prefer __'), or 3) are explicitly asked by the user to change instructions files. Returns a JSON object with an array (of `InstructionFileEntry` objects: `name`, `uri`, `filePath`, `applyTo`, `purpose`, `title`, `lastModified`) and the `conventions` string. Utilizes no network requests and only reads local files in the configured instructions file directories.";
+    
     public readonly inputSchema = { type: "object", properties: {} };
 
-
     private async getConventionDetails(): Promise<string> {
-        // This string fulfills [[req-meta-knowledge]]
-        const conventionsUri = vscode.Uri.joinPath(this.extensionUri, 'src', 'assets', 'CONVENTIONS.md');
+        // The path needs to be correctly resolved from the extension's install directory
+        const conventionsUri = vscode.Uri.joinPath(this.extensionUri, 'out', 'assets', 'CONVENTIONS.md');
         try {
             const uint8Array = await vscode.workspace.fs.readFile(conventionsUri);
             return new TextDecoder().decode(uint8Array);
         } catch (error) {
             console.error("Error reading CONVENTIONS.md:", error);
-            // Adhere to API: throw LanguageModelError for tool-specific errors
             throw new vscode.LanguageModelError("Failed to load convention details. The CONVENTIONS.md file might be missing or corrupted.");
         }
     }
@@ -48,23 +40,18 @@ export class InstructionTool implements vscode.LanguageModelTool<NoToolInput> {
         token: vscode.CancellationToken
     ): Promise<vscode.LanguageModelToolResult> {
         if (token.isCancellationRequested) {
-            throw new vscode.LanguageModelError("Operation cancelled."); // Consistent with API expectations
+            throw new vscode.LanguageModelError("Operation cancelled.");
         }
 
         const workspaceRootUri = getWorkspaceRootUri();
         if (!workspaceRootUri) {
-            // Adhere to API: throw LanguageModelError for tool-specific errors
             throw new vscode.LanguageModelError("No workspace root found. Cannot retrieve instructions.");
         }
 
         try {
             const files = await readAllInstructionFiles(workspaceRootUri);
-            const conventions = await this.getConventionDetails(); // Now async
+            const conventions = await this.getConventionDetails();
 
-            // It's good practice to check cancellation token periodically for long operations,
-            // but readAllInstructionFiles and getConventionDetails are awaited.
-            // If they were to support cancellation internally and throw, that would be ideal.
-            // For now, another check after these potentially long calls.
             if (token.isCancellationRequested) {
                 throw new vscode.LanguageModelError("Operation cancelled.");
             }
@@ -79,10 +66,9 @@ export class InstructionTool implements vscode.LanguageModelTool<NoToolInput> {
             ]);
         } catch (error: any) {
             if (error instanceof vscode.LanguageModelError) {
-                throw error; // Re-throw if already a LanguageModelError
+                throw error;
             }
-            // For other errors, wrap them.
-            console.error("Error during InstructionTool.invoke:", error); // Log the original error
+            console.error("Error during InstructionTool.invoke:", error);
             throw new vscode.LanguageModelError(error.message ?? "An unexpected error occurred in InstructionTool.");
         }
     }

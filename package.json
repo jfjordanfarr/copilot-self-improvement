@@ -1,10 +1,10 @@
 {
   "name": "copilot-self-improvement",
-  "displayName": "copilot-self-improvement",
+  "displayName": "Copilot Self-Improvement",
   "description": "An astonishingly simple MCP tool which empowers GitHub Copilot agents to improve themselves by simply providing good schemas, instructions, and intuitions around the already-existing Github Copilot 'instructions file' mechanism. Secure by default, this tool performs zero network requests and only reads local files in the configured instructions file directories.",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.101.0"
   },
   "categories": [
     "AI",
@@ -12,20 +12,14 @@
     "Other"
   ],
   "activationEvents": [
-    "onChatParticipant:githubdev.copilot-chat"
+    "onStartup"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [],
-    "languageModelTools": [
+    "mcpServerDefinitionProviders": [
       {
-        "name": "copilotSelfImprovement-getSelfImprovementContext",
-        "displayName": "Get Copilot Self-Improvement Instructions and Conventions",
-        "modelDescription": "This is GitHub Copilot's essential tool for understanding and managing its own custom operational instructions (`*.selfImprovement.instructions.md` files). **USE THIS TOOL WHENEVER YOU (Github Copilot):** 1) Make the same mistake repeatedly, 2) Inform the user that you will modify your behavior going forward ('I will note that you prefer __'), or 3) are explicitly asked by the user to change instructions files. Returns a JSON object with an array (of `InstructionFileEntry` objects: `name`, `uri`, `filePath`, `applyTo`, `purpose`, `title`, `lastModified`) and the `conventions` string. Utilizes no network requests and only reads local files in the configured instructions file directories.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {}
-        }
+        "id": "copilot-self-improvement-provider",
+        "label": "Copilot Self-Improvement"
       }
     ]
   },
@@ -41,7 +35,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/sinon": "^17.0.4",
-    "@types/vscode": "^1.100.0",
+    "@types/vscode": "^1.101.0",
     "@types/yaml-front-matter": "^4.1.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
@@ -50,7 +44,8 @@
     "eslint": "^9.25.1",
     "glob": "^11.0.2",
     "sinon": "^20.0.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vscode-jsonrpc": "^8.1.0"
   },
   "dependencies": {
     "yaml-front-matter": "^4.1.1"
