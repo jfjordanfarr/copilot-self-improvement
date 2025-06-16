@@ -54,7 +54,8 @@ Throughout the course of any software development project, developers accumulate
 applyTo: string 
 
 # REQUIRED. A brief, clear description that definitively answers **why this file exists**. 
-purpose: string
+# This field is surfaced to the chat UI on hover and should be concise, ideally one sentence.
+description: string
 
 # OPTIONAL. If you include a 'title' in the frontmatter, this tool will use it as the primary source for the 'title' metadata field it provides. 
 # Otherwise, the title is derived from the following fallbacks, in order:
@@ -77,7 +78,7 @@ Filename: `src/.github/instructions/api-error-handling.selfImprovement.instructi
 ```markdown
 ---
 applyTo: "src/services/apiClient.ts"
-purpose: "Standardize error handling for API calls made via apiClient.ts."
+description: "Standardize error handling for API calls made via apiClient.ts."
 title: "API Client Error Handling Standards"
 ---
 
@@ -95,7 +96,7 @@ When making calls using `apiClient.ts`:
 ### **Summary of What This Tool Provides You:**
 This tool (`copilotSelfImprovement-getInstructionsAndConventions`) will:
 1.  List all existing `*.selfImprovement.instructions.md` files found in `.github/instructions/`.
-2.  For each file, provide metadata: `name`, `uri`, `filePath`, `applyTo`, `purpose`, `title`, `lastModified`.
+2.  For each file, provide metadata: `name`, `uri`, `filePath`, `applyTo`, `description`, `title`, `lastModified`.
 3.  Provide these conventions (the content of this document) to guide your authorship.
 
 Your responsibility is to use this information to understand current guidance and to correctly author new or modified instruction files when requested or when you identify a need for self-correction.

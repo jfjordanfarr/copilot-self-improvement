@@ -409,3 +409,4 @@ FodyWeavers.xsd
 # Project Specific
 *Dump.md
 **/Reference/VSCode/
+dist/

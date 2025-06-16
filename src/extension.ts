@@ -1,28 +1,18 @@
 import * as vscode from 'vscode';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Copilot Self-Improvement: Activating and registering MCP Server Definition Provider.');
-
     const provider: vscode.McpServerDefinitionProvider = {
         onDidChangeMcpServerDefinitions: new vscode.EventEmitter<void>().event,
-        
         async provideMcpServerDefinitions(token: vscode.CancellationToken): Promise<vscode.McpServerDefinition[]> {
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) return [];
             
-            const serverPath = vscode.Uri.joinPath(context.extensionUri, 'out', 'server.js').fsPath;
+            const serverPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'server.js').fsPath;
+            const env = { WORKSPACE_ROOT: workspaceFolders[0].uri.fsPath };
 
-            const serverDefinition = new vscode.McpStdioServerDefinition(
-                'Copilot Self-Improvement', 
-                'node',
-                [serverPath]
-            );
-
-            return [serverDefinition];
+            return [new vscode.McpStdioServerDefinition('Copilot Self-Improvement', 'node', [serverPath], env)];
         }
     };
-
-    context.subscriptions.push(
-        vscode.lm.registerMcpServerDefinitionProvider('copilot-self-improvement-provider', provider)
-    );
+    context.subscriptions.push(vscode.lm.registerMcpServerDefinitionProvider('copilot-self-improvement-provider', provider));
 }
-
 export function deactivate() {}
