@@ -8,8 +8,7 @@ const config = {
   target: 'node',
   mode: 'none',
   entry: {
-    extension: './src/extension.ts',
-    server: './src/server.ts'
+    extension: './src/extension.ts'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),

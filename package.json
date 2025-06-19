@@ -1,17 +1,47 @@
 {
   "name": "copilot-self-improvement",
   "displayName": "Copilot Self-Improvement",
-  "description": "A simple MCP tool to provide local instruction file metadata to GitHub Copilot.",
+  "description": "A VS Code extension that provides project-specific instructions and conventions to GitHub Copilot via a dedicated tool.",
   "version": "0.0.1",
-  "engines": { "vscode": "^1.101.0" },
-  "categories": ["AI", "Chat", "Other"],
-  "activationEvents": ["onStartup"],
+  "publisher": "undefined_publisher",
+  "engines": {
+    "vscode": "^1.101.0" 
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguageModelTool:copilot-self-improvement-getInstructionsAndConventions"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
-    "mcpServerDefinitionProviders": [{
-      "id": "copilot-self-improvement-provider",
-      "label": "Copilot Self-Improvement"
-    }]
+    "commands": [
+      {
+        "command": "copilot-self-improvement.listLMTTools",
+        "title": "CSI: List Registered LM Tools (Debug)"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "copilot-self-improvement-getInstructionsAndConventions",
+        "displayName": "Project Instructions and Conventions",
+        "description": "Accesses local .github/instructions files to guide Copilot with project-specific standards and provides conventions for their use.",
+        "modelDescription": "Use this tool to find special instructions, conventions, or guidance for the current project. It is the primary source for understanding project-specific coding standards, architectural patterns, or how to properly use internal libraries. Call this tool whenever a user asks about 'instructions', 'conventions', 'guidelines', or 'how to do something' in the context of the current workspace, especially before attempting to fix code or generate new features.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filterKeyword": {
+              "type": "string",
+              "description": "An optional keyword to filter instructions."
+            }
+          }
+        },
+        "tags": ["projectContext", "copilotHelper"] 
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -24,10 +54,8 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/sinon": "^17.0.4",
-    "@types/vscode": "^1.101.0",
+    "@types/vscode": "^1.101.0", 
     "@types/yaml-front-matter": "^4.1.3",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
     "copy-webpack-plugin": "^12.0.2",
     "eslint": "^9.25.1",
     "glob": "^11.0.2",
@@ -39,7 +67,6 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "vscode-jsonrpc": "^8.1.0",
     "yaml-front-matter": "^4.1.1"
   }
 }

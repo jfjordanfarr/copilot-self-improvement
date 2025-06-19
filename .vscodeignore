@@ -1,13 +1,23 @@
 .vscode/**
 .vscode-test/**
+.vscode-test.mjs
+# Exclude source files, as the compiled output in dist/ is used
 src/**
-dist/** 
+# Exclude node_modules from the package
+node_modules/
+# Exclude build artifacts that are not the final dist output or are specific to dev
+*.vsix
+*.log
 webpack.config.js
 .gitignore
-.yarnrc
-vsc-extension-quickstart.md
-**/tsconfig.json
-**/eslint.config.mjs
-**/*.map
-**/*.ts
-**/.vscode-test.*
+CHANGELOG.md
+README.md
+LICENSE
+tsconfig.json
+eslint.config.mjs
+
+# If you don't want to ship .map files (optional, but reduces VSIX size):
+# **/*.map
+
+# Keep .vscodeignore itself out of the package
+.vscodeignore
